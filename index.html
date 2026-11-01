@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dice Predictor</title>
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#f4f5f9;--card:#ffffff;--text:#1b1d2a;--muted:#6b7084;--border:#d9dce8;
+  --accent:#5b5bf0;--sq:#b9bcc9;
+}
+:root:not([data-theme="light"]){}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#12131a;--card:#1c1e2a;--text:#eef0fa;--muted:#9ca0b8;--border:#2f3244;
+    --accent:#7c7cff;--sq:#4a4d5e;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#12131a;--card:#1c1e2a;--text:#eef0fa;--muted:#9ca0b8;--border:#2f3244;
+  --accent:#7c7cff;--sq:#4a4d5e;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{
+  margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  display:flex;justify-content:center;padding:32px 16px;
+}
+main{width:100%;max-width:520px;text-align:center}
+h1{font-size:clamp(2rem,8vw,3rem);letter-spacing:.08em;margin:0 0 28px;font-weight:800}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:20px}
+label{display:block;text-align:left;font-weight:700;margin-bottom:8px}
+input{
+  width:100%;padding:14px 16px;font-size:1.05rem;border-radius:12px;
+  border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none;
+}
+input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}
+h2{font-size:1rem;letter-spacing:.1em;margin:0 0 16px;color:var(--muted);font-weight:700;text-transform:uppercase}
+.row{display:flex;justify-content:center;gap:14px;flex-wrap:wrap}
+.sq{width:72px;height:72px;border-radius:12px;background:var(--sq);border:2px solid transparent;cursor:pointer}
+.pal{width:44px;height:44px;border-radius:50%;border:2px solid var(--border);cursor:pointer}
+.pal:hover{transform:scale(1.1)}
+.cell{display:flex;flex-direction:column;align-items:center;gap:8px;font-weight:700}
+button.main{margin-top:16px;padding:12px 20px;border:0;border-radius:12px;background:var(--accent);color:#fff;font-size:1rem;font-weight:700;cursor:pointer}
+button.main:disabled{opacity:.4;cursor:default}
+button.ghost{margin-top:16px;margin-left:8px;padding:12px 16px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+.hist{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto}
+.hr{display:flex;gap:6px;justify-content:center;align-items:center}
+.hr i{width:22px;height:22px;border-radius:6px;display:block}
+.note{font-size:.85rem;color:var(--muted);margin:12px 0 0}
+</style>
+</head>
+<body>
+<main>
+  <h1>DICE PREDICTOR</h1>
+
+  <div class="card">
+    <label for="id">ID:</label>
+    <input id="id" type="text" placeholder="Escribe tu ID" autocomplete="off">
+  </div>
+
+  <div class="card">
+    <h2>Current Colors:</h2>
+    <div class="row" id="cur"></div>
+    <div class="row" id="pal" style="margin-top:16px"></div>
+    <p class="note">Toca un color para llenar los cuadros en orden. Toca un cuadro para borrarlo.</p>
+    <button class="main" id="save" disabled>Guardar roll</button><button class="ghost" id="undo">Borrar último</button>
+  </div>
+
+  <div class="card">
+    <h2>NEXT POSIBLE 2 COLORS</h2>
+    <div class="row" id="pred"></div>
+    <p class="note" id="pnote">Completa los 4 colores actuales.</p>
+  </div>
+
+  <div class="card">
+    <h2>Historial (<span id="hn">0</span>)</h2>
+    <p class="note" id="stats" style="margin:-6px 0 12px"></p>
+    <div class="hist" id="hist"></div>
+  </div>
+</main>
+<script>
+const COLORS=[["Rojo","#e53935"],["Azul","#1e88e5"],["Verde","#43a047"],["Amarillo","#fdd835"],["Naranja","#fb8c00"],["Morado","#8e24aa"]];
+let id="",hist=[],cur=[];
+const $=x=>document.getElementById(x);
+function key(){return "dice:"+id}
+function load(){hist=[];try{const v=localStorage.getItem(key());if(v)hist=JSON.parse(v)}catch(e){}}
+function persist(){try{localStorage.setItem(key(),JSON.stringify(hist))}catch(e){}}
+function predict(rolls){
+  const sc=COLORS.map((_,k)=>{
+    let miss=0;
+    for(let i=rolls.length-1;i>=0;i--){if(rolls[i].includes(k))break;miss++}
+    let tot=0;
+    rolls.forEach(r=>r.forEach(c=>{if(c===k)tot++}));
+    return miss+1/(1+tot);
+  });
+  const t=sc.reduce((a,b)=>a+b,0);
+  return sc.map((v,k)=>[k,v/t*100]).sort((a,b)=>b[1]-a[1]).slice(0,2);
+}
+function render(){
+  $("cur").innerHTML="";
+  for(let i=0;i<4;i++){
+    const d=document.createElement("div");d.className="sq";
+    if(cur[i]!==undefined)d.style.background=COLORS[cur[i]][1];
+    d.onclick=()=>{cur.splice(i,1);render()};
+    $("cur").appendChild(d);
+  }
+  $("save").disabled=cur.length<4||!id;
+  const pr=$("pred");pr.innerHTML="";
+  if(cur.length===4){
+    predict(hist.concat([cur])).forEach(([c,p])=>{
+      const w=document.createElement("div");w.className="cell";
+      w.innerHTML='<div class="sq" style="background:'+COLORS[c][1]+';cursor:default"></div><span>'+p.toFixed(1)+'%</span>';
+      pr.appendChild(w);
+    });
+    $("pnote").textContent=hist.length<10?"Pocos datos: guarda más rolls para mejorar el cálculo.":"Basado en "+hist.length+" rolls guardados.";
+  }else{
+    for(let i=0;i<2;i++){const d=document.createElement("div");d.className="sq";d.style.cursor="default";pr.appendChild(d)}
+    $("pnote").textContent="Completa los 4 colores actuales.";
+  }
+  $("hn").textContent=hist.length;
+  let hits=0,tot=0;
+  for(let i=1;i<hist.length;i++){const p=predict(hist.slice(0,i)).map(x=>x[0]);tot++;if(p.some(c=>hist[i].includes(c)))hits++}
+  $("stats").textContent=tot?"Aciertos: "+hits+"/"+tot+" ("+(hits/tot*100).toFixed(1)+"%)":"";
+  $("hist").innerHTML=hist.slice().reverse().map(r=>'<div class="hr">'+r.map(c=>'<i style="background:'+COLORS[c][1]+'"></i>').join("")+'</div>').join("");
+}
+COLORS.forEach(([n,c],i)=>{
+  const b=document.createElement("button");b.className="pal";b.title=n;b.style.background=c;
+  b.onclick=()=>{if(cur.length<4){cur.push(i);render()}};
+  $("pal").appendChild(b);
+});
+$("id").addEventListener("input",e=>{id=e.target.value.trim();if(id)load();else hist=[];render()});
+$("save").onclick=()=>{hist.push(cur.slice());persist();cur=[];render()};
+$("undo").onclick=()=>{hist.pop();persist();render()};
+render();
+</script>
+</body>
+</html>
